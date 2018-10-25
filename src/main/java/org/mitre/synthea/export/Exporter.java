@@ -12,6 +12,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.function.Predicate;
 
+import org.apache.commons.lang3.StringUtils;
 import org.mitre.synthea.engine.Generator;
 import org.mitre.synthea.helpers.Config;
 import org.mitre.synthea.helpers.Utilities;
@@ -38,13 +39,21 @@ public abstract class Exporter {
     // Defaults to STU3 output
     if (Boolean.parseBoolean(Config.get("exporter.fhir.export"))) {
       String bundleJson = FhirStu3.convertToFHIR(person, stopTime);
-      File outDirectory = getOutputFolder("fhir", person);
-      Path outFilePath = outDirectory.toPath().resolve(filename(person, "json"));
+      if (!StringUtils.isBlank(Config.get("exporter.fhir.target_server_base_url"))) {
+        try {
+          Utilities.sendFhirJsonToUrl(bundleJson, Config.get("exporter.fhir.target_server_base_url"));
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      } else {
+        File outDirectory = getOutputFolder("fhir", person);
+        Path outFilePath = outDirectory.toPath().resolve(filename(person, "json"));
 
-      try {
-        Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
-      } catch (IOException e) {
-        e.printStackTrace();
+        try {
+          Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
       }
     }
     if (Boolean.parseBoolean(Config.get("exporter.fhir_dstu2.export"))) {

@@ -15,12 +15,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.lang3.StringUtils;
 import org.hl7.fhir.dstu3.model.Bundle;
 import org.hl7.fhir.dstu3.model.Bundle.BundleEntryComponent;
 import org.hl7.fhir.dstu3.model.Bundle.BundleType;
 import org.hl7.fhir.dstu3.model.IntegerType;
 import org.hl7.fhir.dstu3.model.Practitioner;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Utilities;
 import org.mitre.synthea.world.agents.Clinician;
 import org.mitre.synthea.world.agents.Provider;
 
@@ -66,18 +68,26 @@ public abstract class FhirPractitionerExporterStu3 {
       String bundleJson = FHIR_CTX.newJsonParser().setPrettyPrint(true)
           .encodeResourceToString(bundle);
 
-      // get output folder
-      List<String> folders = new ArrayList<>();
-      folders.add("fhir");
-      String baseDirectory = Config.get("exporter.baseDirectory");
-      File f = Paths.get(baseDirectory, folders.toArray(new String[0])).toFile();
-      f.mkdirs();
-      Path outFilePath = f.toPath().resolve("practitionerInformation" + stop + ".json");
+      if (!StringUtils.isBlank(Config.get("exporter.fhir.target_server_base_url"))) {
+        try {
+          Utilities.sendFhirJsonToUrl(bundleJson, Config.get("exporter.fhir.target_server_base_url"));
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      } else {
+        // get output folder
+        List<String> folders = new ArrayList<>();
+        folders.add("fhir");
+        String baseDirectory = Config.get("exporter.baseDirectory");
+        File f = Paths.get(baseDirectory, folders.toArray(new String[0])).toFile();
+        f.mkdirs();
+        Path outFilePath = f.toPath().resolve("practitionerInformation" + stop + ".json");
 
-      try {
-        Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
-      } catch (IOException e) {
-        e.printStackTrace();
+        try {
+          Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
       }
     }
   }

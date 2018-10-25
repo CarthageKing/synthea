@@ -32,6 +32,7 @@ dependencies {
   compile 'ca.uhn.hapi.fhir:hapi-fhir-structures-dstu3:3.4.0'
   compile 'ca.uhn.hapi.fhir:hapi-fhir-structures-dstu2:3.4.0'
   compile 'ca.uhn.hapi.fhir:hapi-fhir-structures-r4:3.4.0'
+  compile 'org.apache.httpcomponents:httpclient:4.5.5'
   // C-CDA export uses Apache FreeMarker templates
   compile 'org.freemarker:freemarker:2.3.26-incubating'
   // location processing

@@ -1396,9 +1396,11 @@ public class FhirStu3 {
         .getEnd()
         .getTime());
     if (!inpatient && !outpatient) {
-      eob.setProvider(new Reference().setReference(findProviderUrl(provider, bundle)));
+      //eob.setProvider(new Reference().setReference(findProviderUrl(provider, bundle)));
+      eob.setOrganization(new Reference().setReference(findProviderUrl(provider, bundle)));
     } else {
-      eob.setProviderTarget(new Practitioner()
+      //eob.setProviderTarget(new Practitioner()
+      eob.setOrganizationTarget(new Organization()
           .addIdentifier(new Identifier()
               .setValue("yes")));
     }

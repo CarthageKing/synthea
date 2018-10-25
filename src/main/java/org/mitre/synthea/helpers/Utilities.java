@@ -8,17 +8,29 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonPrimitive;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
 import java.util.Random;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpHeaders;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.mitre.synthea.engine.Logic;
 import org.mitre.synthea.engine.State;
 import org.mitre.synthea.world.concepts.HealthRecord.Code;
 
 public class Utilities {
+  public static final CloseableHttpClient HTTP_CLIENT = HttpClientBuilder.create().build();
+
   /**
    * Convert a quantity of time in a specified units into milliseconds.
    *
@@ -314,5 +326,30 @@ public class Utilities {
     Random rand = new Random();
     int saltInt = rand.nextInt(MAX - MIN + 1) + MIN;
     return String.valueOf(saltInt);
+  }
+  
+  public static void sendFhirJsonToUrl(String payload, String targetUrl) {
+    HttpPost httpReq = new HttpPost(targetUrl);
+    httpReq.addHeader(HttpHeaders.CONTENT_TYPE, ca.uhn.fhir.rest.api.Constants.CT_FHIR_JSON_NEW);
+    httpReq.addHeader(HttpHeaders.ACCEPT, ca.uhn.fhir.rest.api.Constants.CT_FHIR_JSON_NEW);
+    HttpEntity httpEntity = new StringEntity(payload, StandardCharsets.UTF_8);
+    httpReq.setEntity(httpEntity);
+    CloseableHttpResponse httpRsp = null;
+    InputStream istrm = null;
+    try {
+      httpRsp = HTTP_CLIENT.execute(httpReq);
+      HttpEntity responseEntity = httpRsp.getEntity();
+      if (null != responseEntity) {
+        istrm = responseEntity.getContent();
+        String retcontent = IOUtils.toString(istrm, StandardCharsets.UTF_8);
+      }
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } finally {
+      IOUtils.closeQuietly(istrm);
+      IOUtils.closeQuietly(httpRsp);
+    }
   }
 }
