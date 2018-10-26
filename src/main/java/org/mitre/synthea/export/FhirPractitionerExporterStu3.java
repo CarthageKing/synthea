@@ -21,6 +21,7 @@ import org.hl7.fhir.dstu3.model.Bundle.BundleEntryComponent;
 import org.hl7.fhir.dstu3.model.Bundle.BundleType;
 import org.hl7.fhir.dstu3.model.IntegerType;
 import org.hl7.fhir.dstu3.model.Practitioner;
+import org.hl7.fhir.dstu3.model.Resource;
 import org.mitre.synthea.helpers.Config;
 import org.mitre.synthea.helpers.Utilities;
 import org.mitre.synthea.world.agents.Clinician;
@@ -62,6 +63,13 @@ public abstract class FhirPractitionerExporterStu3 {
               }
             }
           }
+        }
+      }
+
+      if (Boolean.parseBoolean(Config.get("exporter.fhir.exclude_organization_and_practitioner_resources"))) {
+        for (BundleEntryComponent bec : bundle.getEntry()) {
+          Resource r = bec.getResource();
+          bec.setFullUrl("http://synthea-dummy/fhir/" + r.getResourceType().name() + "/" + r.getIdElement().getIdPart());
         }
       }
 

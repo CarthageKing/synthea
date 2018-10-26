@@ -1,6 +1,7 @@
 package org.mitre.synthea.helpers;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
@@ -14,9 +15,36 @@ public abstract class Config {
   static {
     try {
       load(Config.class.getResourceAsStream("/synthea.properties"));
+      System.out.println("Loaded default synthea.properties file");
     } catch (IOException e) {
       System.err.println("Unable to load default properties file");
       e.printStackTrace();
+    }
+
+    File f = null;
+
+    f = new File("conf/synthea.properties");
+    f = f.getAbsoluteFile();
+    if (f.exists()) {
+      try (InputStream is = new FileInputStream(f)) {
+        load(is);
+        System.out.println("loaded " + f);
+      } catch (IOException e) {
+        System.err.println("Unable to load " + f);
+        e.printStackTrace();
+      }
+    }
+
+    f = new File("../conf/synthea.properties");
+    f = f.getAbsoluteFile();
+    if (f.exists()) {
+      try (InputStream is = new FileInputStream(f)) {
+        load(is);
+        System.out.println("loaded " + f);
+      } catch (IOException e) {
+        System.err.println("Unable to load " + f);
+        e.printStackTrace();
+      }
     }
   }
 

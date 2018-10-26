@@ -49,7 +49,16 @@ public class Module {
     retVal.put("Health Insurance", new HealthInsuranceModule());
 
     try {
-      URL modulesFolder = ClassLoader.getSystemClassLoader().getResource("modules");
+      URL modulesFolder = null;
+      File mf1 = new File("modules").getAbsoluteFile();
+      File mf2 = new File("../modules").getAbsoluteFile();
+      if (mf1.exists()) {
+        modulesFolder = mf1.toURI().toURL();
+      } else if (mf2.exists()) {
+        modulesFolder = mf2.toURI().toURL();
+      } else {
+        modulesFolder = ClassLoader.getSystemClassLoader().getResource("modules");
+      }
       Path path = Paths.get(modulesFolder.toURI());
       Files.walk(path, Integer.MAX_VALUE).filter(Files::isReadable).filter(Files::isRegularFile)
           .filter(p -> p.toString().endsWith(".json")).forEach(t -> {

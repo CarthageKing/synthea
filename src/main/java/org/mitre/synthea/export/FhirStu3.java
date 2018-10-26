@@ -1,18 +1,11 @@
 package org.mitre.synthea.export;
 
-import ca.uhn.fhir.context.FhirContext;
-
-import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.Table;
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -117,6 +110,14 @@ import org.mitre.synthea.world.concepts.HealthRecord.Medication;
 import org.mitre.synthea.world.concepts.HealthRecord.Observation;
 import org.mitre.synthea.world.concepts.HealthRecord.Procedure;
 import org.mitre.synthea.world.concepts.HealthRecord.Report;
+
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import ca.uhn.fhir.context.FhirContext;
 
 public class FhirStu3 {
   // HAPI FHIR warns that the context creation is expensive, and should be performed
@@ -267,9 +268,43 @@ public class FhirStu3 {
       explanationOfBenefit(personEntry,bundle,encounterEntry,person,
           encounterClaim, encounter);
     }
+    
+    List<Resource> removed = new ArrayList<>();
+
+    if (Boolean.parseBoolean(Config.get("exporter.fhir.exclude_organization_and_practitioner_resources"))) {
+      for (Iterator<BundleEntryComponent> iter = bundle.getEntry().iterator(); iter.hasNext();) {
+        BundleEntryComponent bec = iter.next();
+        if (bec.getResource() instanceof Organization) {
+          removed.add(bec.getResource());
+          iter.remove();
+        } else if (bec.getResource() instanceof Practitioner) {
+          removed.add(bec.getResource());
+          iter.remove();
+        }
+      }
+    }
 
     String bundleJson = FHIR_CTX.newJsonParser().setPrettyPrint(true)
         .encodeResourceToString(bundle);
+
+    if (!removed.isEmpty()) {
+      // TODO: a better logic
+      StringBuilder sb = new StringBuilder(bundleJson);
+      for (Resource ibr : removed) {
+        boolean changed = true;
+        final String tempId = "urn:uuid:" + ibr.getIdElement().getIdPart();
+        final String newRef = ibr.getResourceType().name() + "/" + ibr.getIdElement().getIdPart();
+        while (changed) {
+          changed = false;
+          int idx = sb.indexOf(tempId);
+          if (idx > 0) {
+            sb.replace(idx, idx + tempId.length(), newRef);
+            changed = true;
+          }
+        }
+      }
+      bundleJson = sb.toString();
+    }
 
     return bundleJson;
   }

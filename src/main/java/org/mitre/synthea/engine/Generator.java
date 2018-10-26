@@ -189,7 +189,7 @@ public class Generator {
    * Generate the population, using the currently set configuration settings.
    */
   public void run() {
-    ExecutorService threadPool = Executors.newFixedThreadPool(8);
+    ExecutorService threadPool = Executors.newFixedThreadPool(Integer.valueOf(Config.get("generator.num_generator_threads")));
 
     for (int i = 0; i < this.options.population; i++) {
       final int index = i;

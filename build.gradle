@@ -149,3 +149,11 @@ run {
     args Eval.me(arams)
   }
 }
+
+applicationDistribution.from("$projectDir/src/main/resources/synthea.properties") {
+  into "conf"
+}
+
+applicationDistribution.from("$projectDir/src/main/resources/modules") {
+  into "modules"
+}
