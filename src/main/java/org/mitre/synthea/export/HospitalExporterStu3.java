@@ -78,10 +78,21 @@ public abstract class HospitalExporterStu3 {
         f.mkdirs();
         Path outFilePath = f.toPath().resolve("hospitalInformation" + stop + ".json");
 
-        try {
-          Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
-        } catch (IOException e) {
-          e.printStackTrace();
+        if (Boolean.valueOf(Config.get("exporter.fhir.compress_data"))) {
+          File zipFile = Utilities.compressToZip(outFilePath.toFile(), bundleJson);
+          if (Boolean.valueOf(Config.get("exporter.aws.s3.export_enabled"))) {
+            Utilities.uploadToAwsS3(zipFile,
+              Config.get("exporter.aws.s3.bucket_name"),
+              Config.get("exporter.aws.s3.bucket_base_path"),
+              Config.get("exporter.aws.s3.aws_access_key"),
+              Config.get("exporter.aws.s3.aws_secret_key"));
+          }
+        } else {
+          try {
+            Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
         }
       }
     }

@@ -1,20 +1,20 @@
 package org.mitre.synthea.helpers;
 
-import com.google.common.base.Charsets;
-import com.google.common.io.Resources;
-import com.google.gson.FieldNamingPolicy;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonPrimitive;
-
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Calendar;
 import java.util.Random;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.Deflater;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
@@ -27,6 +27,19 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.mitre.synthea.engine.Logic;
 import org.mitre.synthea.engine.State;
 import org.mitre.synthea.world.concepts.HealthRecord.Code;
+
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.google.common.base.Charsets;
+import com.google.common.io.Resources;
+import com.google.gson.FieldNamingPolicy;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonPrimitive;
 
 public class Utilities {
   public static final CloseableHttpClient HTTP_CLIENT = HttpClientBuilder.create().build();
@@ -350,6 +363,53 @@ public class Utilities {
     } finally {
       IOUtils.closeQuietly(istrm);
       IOUtils.closeQuietly(httpRsp);
+    }
+  }
+
+  public static File compressToZip(File origFile, String dataToWrite) {
+    File of = origFile.getAbsoluteFile();
+    String baseFilename = origFile.getName();
+    File ofp = of.getParentFile();
+    File outf = new File(ofp, baseFilename + ".zip");
+    try (ZipOutputStream zos = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(outf)), StandardCharsets.UTF_8)) {
+      zos.setLevel(Deflater.BEST_COMPRESSION);
+      ZipEntry ze = new ZipEntry(baseFilename);
+      zos.putNextEntry(ze);
+      zos.write(dataToWrite.getBytes(StandardCharsets.UTF_8));
+      zos.flush();
+      return outf;
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return null;
+  }
+
+  private static AmazonS3Client AWS_S3_CLIENT;
+
+  public static void uploadToAwsS3(File zipFile, String bucketName, String basePath, String accessKey, String secretKey) {
+    File of = zipFile.getAbsoluteFile();
+    String baseFilename = zipFile.getName();
+    String objectKey = basePath + "/" + baseFilename;
+
+    try {
+      AmazonS3Client s3client = null;
+
+      synchronized (Utilities.class) {
+        if (null == AWS_S3_CLIENT) {
+          final AWSCredentials awsc = new BasicAWSCredentials(accessKey, secretKey);
+          AWS_S3_CLIENT = (AmazonS3Client) AmazonS3ClientBuilder.standard().withCredentials(new AWSStaticCredentialsProvider(awsc)).build();
+        }
+        s3client = AWS_S3_CLIENT;
+      }
+
+      PutObjectRequest pr = new PutObjectRequest(bucketName, objectKey, of);
+      s3client.putObject(pr);
+    } finally {
+      try {
+        Files.delete(of.toPath());
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
   }
 }

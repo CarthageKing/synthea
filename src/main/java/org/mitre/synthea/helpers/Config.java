@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.commons.lang3.StringUtils;
+
 public abstract class Config {
   private static Properties properties = new Properties();
 
@@ -44,6 +46,32 @@ public abstract class Config {
       } catch (IOException e) {
         System.err.println("Unable to load " + f);
         e.printStackTrace();
+      }
+    }
+
+    if (Boolean.valueOf(get("exporter.aws.s3.export_enabled"))) {
+      String cfg = "exporter.aws.s3.bucket_name";
+      if (StringUtils.isBlank(get(cfg))) {
+        System.err.println(cfg);
+        throw new Error("AWS S3 export is enabled but config option '" + cfg + "' is blank or has invalid value");
+      }
+
+      cfg = "exporter.aws.s3.bucket_base_path";
+      if (StringUtils.isBlank(get(cfg))) {
+        System.err.println(cfg);
+        throw new Error("AWS S3 export is enabled but config option '" + cfg + "' is blank or has invalid value");
+      }
+
+      cfg = "exporter.aws.s3.aws_access_key";
+      if (StringUtils.isBlank(get(cfg))) {
+        System.err.println(cfg);
+        throw new Error("AWS S3 export is enabled but config option '" + cfg + "' is blank or has invalid value");
+      }
+
+      cfg = "exporter.aws.s3.aws_secret_key";
+      if (StringUtils.isBlank(get(cfg))) {
+        System.err.println(cfg);
+        throw new Error("AWS S3 export is enabled but config option '" + cfg + "' is blank or has invalid value");
       }
     }
   }
