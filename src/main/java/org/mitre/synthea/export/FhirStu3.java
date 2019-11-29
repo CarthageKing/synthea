@@ -1,13 +1,5 @@
 package org.mitre.synthea.export;
 
-import ca.uhn.fhir.context.FhirContext;
-
-import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.Table;
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-
 import java.awt.geom.Point2D;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -15,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,6 +109,7 @@ import org.hl7.fhir.utilities.xhtml.XhtmlNode;
 import org.mitre.synthea.engine.Components;
 import org.mitre.synthea.engine.Components.Attachment;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
 import org.mitre.synthea.helpers.RandomNumberGenerator;
 import org.mitre.synthea.helpers.SimpleCSV;
 import org.mitre.synthea.helpers.Utilities;
@@ -135,6 +129,14 @@ import org.mitre.synthea.world.concepts.HealthRecord.Medication;
 import org.mitre.synthea.world.concepts.HealthRecord.Observation;
 import org.mitre.synthea.world.concepts.HealthRecord.Procedure;
 import org.mitre.synthea.world.concepts.HealthRecord.Report;
+
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import ca.uhn.fhir.context.FhirContext;
 
 public class FhirStu3 {
   // HAPI FHIR warns that the context creation is expensive, and should be performed
@@ -160,6 +162,8 @@ public class FhirStu3 {
       Config.getAsBoolean("exporter.fhir.use_shr_extensions");
   protected static boolean TRANSACTION_BUNDLE =
       Config.getAsBoolean("exporter.fhir.transaction_bundle");
+  protected static boolean TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS =
+    Config.getAsBoolean(Constants.EXPORTER_FHIR_TXBUNDLE_USE_SEARCH_URLS_IN_REFS);
 
   private static final String COUNTRY_CODE = Config.get("generate.geography.country_code");
 
@@ -302,6 +306,46 @@ public class FhirStu3 {
       explanationOfBenefit(personEntry,bundle,encounterEntry,person,
           encounterClaim, encounter);
     }
+    
+    List<Resource> removed = new ArrayList<>();
+
+    if (Boolean.parseBoolean(Config.get(Constants.EXPORTER_FHIR_STU3_EXCLUDE_ORG_PRAC_RESOURCES))) {
+      for (Iterator<BundleEntryComponent> iter = bundle.getEntry().iterator(); iter.hasNext();) {
+        BundleEntryComponent bec = iter.next();
+        if (bec.getResource() instanceof Organization) {
+          removed.add(bec.getResource());
+          iter.remove();
+        } else if (bec.getResource() instanceof Practitioner) {
+          removed.add(bec.getResource());
+          iter.remove();
+        }
+      }
+    }
+
+    String bundleJson = FHIR_CTX.newJsonParser().setPrettyPrint(true)
+      .encodeResourceToString(bundle);
+
+    if (!removed.isEmpty()) {
+      // TODO: a better logic
+      StringBuilder sb = new StringBuilder(bundleJson);
+      for (Resource ibr : removed) {
+        boolean changed = true;
+        final String tempId = "urn:uuid:" + ibr.getIdElement().getIdPart();
+        final String newRef = ibr.getResourceType().name() + "/" + ibr.getIdElement().getIdPart();
+        while (changed) {
+          changed = false;
+          int idx = sb.indexOf(tempId);
+          if (idx > 0) {
+            sb.replace(idx, idx + tempId.length(), newRef);
+            changed = true;
+          }
+        }
+      }
+      bundleJson = sb.toString();
+    }
+
+    bundle = FHIR_CTX.newJsonParser().parseResource(Bundle.class, bundleJson);
+
     return bundle;
   }
 
@@ -679,7 +723,7 @@ public class FhirStu3 {
       provider = person.getProvider(EncounterType.WELLNESS, encounter.start);
     }
     
-    if (TRANSACTION_BUNDLE) {
+    if (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS) {
       encounterResource.setServiceProvider(new Reference(
               ExportHelper.buildFhirSearchUrl("Organization", provider.getResourceID())));
     } else {
@@ -694,7 +738,7 @@ public class FhirStu3 {
     encounterResource.getServiceProvider().setDisplay(provider.name);
 
     if (encounter.clinician != null) {
-      if (TRANSACTION_BUNDLE) {
+      if (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS) {
         encounterResource.addParticipant().setIndividual(new Reference(
                 ExportHelper.buildFhirNpiSearchUrl(encounter.clinician)));
       } else {

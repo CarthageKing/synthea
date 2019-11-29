@@ -46,6 +46,8 @@ dependencies {
   implementation 'ca.uhn.hapi.fhir:hapi-fhir-structures-dstu2:5.2.0'
   implementation 'ca.uhn.hapi.fhir:hapi-fhir-structures-r4:5.2.0'
   implementation 'ca.uhn.hapi.fhir:hapi-fhir-client:5.2.0'
+  implementation 'com.amazonaws:aws-java-sdk-s3:1.11.968'
+  implementation 'com.amazonaws:aws-java-sdk-s3control:1.11.968'
   // C-CDA export uses Apache FreeMarker templates
   implementation 'org.freemarker:freemarker:2.3.26-incubating'
 
@@ -256,6 +258,14 @@ run {
   if (maxHeapSizeVar != null) {
     maxHeapSize = maxHeapSizeVar
   }
+}
+
+applicationDistribution.from("$projectDir/src/main/resources/synthea.properties") {
+  into "conf"
+}
+
+applicationDistribution.from("$projectDir/src/main/resources/modules") {
+  into "modules"
 }
 
 task sourceJar(type: Jar) {

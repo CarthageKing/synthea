@@ -1,6 +1,7 @@
 package org.mitre.synthea.helpers;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
@@ -8,15 +9,70 @@ import java.io.InputStream;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.commons.lang3.StringUtils;
+
 public abstract class Config {
   private static Properties properties = new Properties();
 
   static {
     try {
       load(Config.class.getResourceAsStream("/synthea.properties"));
+      System.out.println("Loaded default synthea.properties file");
     } catch (IOException e) {
       System.err.println("Unable to load default properties file");
       e.printStackTrace();
+    }
+
+    File f = null;
+
+    f = new File("conf/synthea.properties");
+    f = f.getAbsoluteFile();
+    if (f.exists()) {
+      try (InputStream is = new FileInputStream(f)) {
+        load(is);
+        System.out.println("loaded " + f);
+      } catch (IOException e) {
+        System.err.println("Unable to load " + f);
+        e.printStackTrace();
+      }
+    }
+
+    f = new File("../conf/synthea.properties");
+    f = f.getAbsoluteFile();
+    if (f.exists()) {
+      try (InputStream is = new FileInputStream(f)) {
+        load(is);
+        System.out.println("loaded " + f);
+      } catch (IOException e) {
+        System.err.println("Unable to load " + f);
+        e.printStackTrace();
+      }
+    }
+
+    if (Boolean.valueOf(get(Constants.EXPORT_AWS_S3_EXPORT_ENABLED))) {
+      String cfg = Constants.EXPORT_AWS_S3_BUCKET_NAME;
+      if (StringUtils.isBlank(get(cfg))) {
+        System.err.println(cfg);
+        throw new Error("AWS S3 export is enabled but config option '" + cfg + "' is blank or has invalid value");
+      }
+
+      cfg = Constants.EXPORT_AWS_S3_BUCKET_BASE_PATH;
+      if (StringUtils.isBlank(get(cfg))) {
+        System.err.println(cfg);
+        throw new Error("AWS S3 export is enabled but config option '" + cfg + "' is blank or has invalid value");
+      }
+
+      cfg = Constants.EXPORT_AWS_S3_ACCESS_KEY;
+      if (StringUtils.isBlank(get(cfg))) {
+        System.err.println(cfg);
+        throw new Error("AWS S3 export is enabled but config option '" + cfg + "' is blank or has invalid value");
+      }
+
+      cfg = Constants.EXPORT_AWS_S3_SECRET_KEY;
+      if (StringUtils.isBlank(get(cfg))) {
+        System.err.println(cfg);
+        throw new Error("AWS S3 export is enabled but config option '" + cfg + "' is blank or has invalid value");
+      }
     }
   }
 

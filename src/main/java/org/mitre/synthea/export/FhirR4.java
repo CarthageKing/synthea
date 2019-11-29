@@ -1,19 +1,12 @@
 package org.mitre.synthea.export;
 
-import ca.uhn.fhir.context.FhirContext;
-
-import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.Table;
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-
 import java.awt.geom.Point2D;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,8 +75,8 @@ import org.hl7.fhir.r4.model.Identifier.IdentifierUse;
 import org.hl7.fhir.r4.model.ImagingStudy.ImagingStudySeriesComponent;
 import org.hl7.fhir.r4.model.ImagingStudy.ImagingStudySeriesInstanceComponent;
 import org.hl7.fhir.r4.model.ImagingStudy.ImagingStudyStatus;
-import org.hl7.fhir.r4.model.Immunization.ImmunizationStatus;
 import org.hl7.fhir.r4.model.Immunization;
+import org.hl7.fhir.r4.model.Immunization.ImmunizationStatus;
 import org.hl7.fhir.r4.model.IntegerType;
 import org.hl7.fhir.r4.model.Location.LocationPositionComponent;
 import org.hl7.fhir.r4.model.Location.LocationStatus;
@@ -126,13 +119,12 @@ import org.hl7.fhir.r4.model.Timing.TimingRepeatComponent;
 import org.hl7.fhir.r4.model.Timing.UnitsOfTime;
 import org.hl7.fhir.r4.model.Type;
 import org.hl7.fhir.r4.model.codesystems.DoseRateType;
-
 import org.hl7.fhir.utilities.xhtml.NodeType;
 import org.hl7.fhir.utilities.xhtml.XhtmlNode;
-
 import org.mitre.synthea.engine.Components;
 import org.mitre.synthea.engine.Components.Attachment;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
 import org.mitre.synthea.helpers.RandomNumberGenerator;
 import org.mitre.synthea.helpers.SimpleCSV;
 import org.mitre.synthea.helpers.Utilities;
@@ -153,6 +145,14 @@ import org.mitre.synthea.world.concepts.HealthRecord.Observation;
 import org.mitre.synthea.world.concepts.HealthRecord.Procedure;
 import org.mitre.synthea.world.concepts.HealthRecord.Report;
 import org.mitre.synthea.world.geography.Location;
+
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import ca.uhn.fhir.context.FhirContext;
 
 public class FhirR4 {
   // HAPI FHIR warns that the context creation is expensive, and should be performed
@@ -180,6 +180,8 @@ public class FhirR4 {
       Config.getAsBoolean("exporter.fhir.use_shr_extensions");
   protected static boolean TRANSACTION_BUNDLE =
       Config.getAsBoolean("exporter.fhir.transaction_bundle");
+  protected static boolean TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS =
+    Config.getAsBoolean(Constants.EXPORTER_FHIR_TXBUNDLE_USE_SEARCH_URLS_IN_REFS);
   protected static boolean USE_US_CORE_IG =
       Config.getAsBoolean("exporter.fhir.use_us_core_ig");
 
@@ -338,6 +340,46 @@ public class FhirR4 {
       // Add Provenance to the Bundle
       provenance(bundle, person, stopTime);
     }
+
+    List<Resource> removed = new ArrayList<>();
+
+    if (Boolean.parseBoolean(Config.get(Constants.EXPORTER_FHIR_R4_EXCLUDE_ORG_PRAC_RESOURCES))) {
+      for (Iterator<BundleEntryComponent> iter = bundle.getEntry().iterator(); iter.hasNext();) {
+        BundleEntryComponent bec = iter.next();
+        if (bec.getResource() instanceof Organization) {
+          removed.add(bec.getResource());
+          iter.remove();
+        } else if (bec.getResource() instanceof Practitioner) {
+          removed.add(bec.getResource());
+          iter.remove();
+        }
+      }
+    }
+
+    String bundleJson = FHIR_CTX.newJsonParser().setPrettyPrint(true)
+      .encodeResourceToString(bundle);
+
+    if (!removed.isEmpty()) {
+      // TODO: a better logic
+      StringBuilder sb = new StringBuilder(bundleJson);
+      for (Resource ibr : removed) {
+        boolean changed = true;
+        final String tempId = "urn:uuid:" + ibr.getIdElement().getIdPart();
+        final String newRef = ibr.getResourceType().name() + "/" + ibr.getIdElement().getIdPart();
+        while (changed) {
+          changed = false;
+          int idx = sb.indexOf(tempId);
+          if (idx > 0) {
+            sb.replace(idx, idx + tempId.length(), newRef);
+            changed = true;
+          }
+        }
+      }
+      bundleJson = sb.toString();
+    }
+
+    bundle = FHIR_CTX.newJsonParser().parseResource(Bundle.class, bundleJson);
+
     return bundle;
   }
 
@@ -729,7 +771,7 @@ public class FhirR4 {
       provider = person.getProvider(EncounterType.WELLNESS, encounter.start);
     }
     
-    if (TRANSACTION_BUNDLE) {
+    if (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS) {
       encounterResource.setServiceProvider(new Reference(
               ExportHelper.buildFhirSearchUrl("Organization", provider.getResourceID())));
     } else {
@@ -743,7 +785,7 @@ public class FhirR4 {
     }
     encounterResource.getServiceProvider().setDisplay(provider.name);
     if (USE_US_CORE_IG) {
-      String referenceUrl = TRANSACTION_BUNDLE
+      String referenceUrl = (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS)
               ? ExportHelper.buildFhirSearchUrl("Location", provider.getResourceLocationID())
               : findLocationUrl(provider, bundle);
       encounterResource.addLocation().setLocation(new Reference()
@@ -752,7 +794,7 @@ public class FhirR4 {
     }
 
     if (encounter.clinician != null) {
-      if (TRANSACTION_BUNDLE) {
+      if (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS) {
         encounterResource.addParticipant().setIndividual(new Reference(
                 ExportHelper.buildFhirNpiSearchUrl(encounter.clinician)));
       } else {
@@ -1117,7 +1159,7 @@ public class FhirR4 {
         .setDisplay("Primary Care Practitioner"));
     if (encounter.clinician != null) {
       // This is what should happen if BlueButton 2.0 wasn't needlessly restrictive
-      String practitionerFullUrl = TRANSACTION_BUNDLE
+      String practitionerFullUrl = (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS)
               ? ExportHelper.buildFhirNpiSearchUrl(encounter.clinician)
               : findPractitioner(encounter.clinician, bundle);
       eob.setProvider(new Reference(practitionerFullUrl));
@@ -1128,7 +1170,7 @@ public class FhirR4 {
       referral.setRequester(new Reference(practitionerFullUrl));
       referral.addPerformer(new Reference(practitionerFullUrl));
     } else if (encounter.provider != null) {
-      String providerUrl = TRANSACTION_BUNDLE
+      String providerUrl = (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS)
               ? ExportHelper.buildFhirSearchUrl("Location",
                       encounter.provider.getResourceLocationID())
               : findProviderUrl(encounter.provider, bundle);
@@ -1822,14 +1864,14 @@ public class FhirR4 {
     if (clinician != null) {
       clinicianDisplay = clinician.getFullname();
     }
-    String practitionerFullUrl = TRANSACTION_BUNDLE
+    String practitionerFullUrl = (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS)
             ? ExportHelper.buildFhirNpiSearchUrl(clinician)
             : findPractitioner(clinician, bundle);
     Provider providerOrganization = person.record.provider;
     if (providerOrganization == null) {
       providerOrganization = person.getProvider(EncounterType.WELLNESS, stopTime);
     }
-    String organizationFullUrl = TRANSACTION_BUNDLE
+    String organizationFullUrl = (TRANSACTION_BUNDLE && TRANSACTION_BUNDLE_USE_SEARCH_URLS_IN_REFS)
             ? ExportHelper.buildFhirSearchUrl("Organization",
                     providerOrganization.getResourceID())
             : findProviderUrl(providerOrganization, bundle);

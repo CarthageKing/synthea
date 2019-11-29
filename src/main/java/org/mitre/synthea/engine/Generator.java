@@ -1,8 +1,5 @@
 package org.mitre.synthea.engine;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -12,7 +9,6 @@ import java.io.FilenameFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.lang.reflect.Type;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -31,11 +27,11 @@ import java.util.stream.Collectors;
 import org.apache.commons.io.IOCase;
 import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.apache.commons.lang3.StringUtils;
-
 import org.mitre.synthea.editors.GrowthDataErrorsEditor;
 import org.mitre.synthea.export.CDWExporter;
 import org.mitre.synthea.export.Exporter;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
 import org.mitre.synthea.helpers.RandomNumberGenerator;
 import org.mitre.synthea.helpers.TransitionMetrics;
 import org.mitre.synthea.helpers.Utilities;
@@ -52,6 +48,9 @@ import org.mitre.synthea.world.concepts.Costs;
 import org.mitre.synthea.world.concepts.VitalSign;
 import org.mitre.synthea.world.geography.Demographics;
 import org.mitre.synthea.world.geography.Location;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 /**
  * Generator creates a population by running the generic modules each timestep per Person.
@@ -291,7 +290,7 @@ public class Generator implements RandomNumberGenerator {
       Config.set("generate.append_numbers_to_person_names", "false");
     }
 
-    ExecutorService threadPool = Executors.newFixedThreadPool(8);
+    ExecutorService threadPool = Executors.newFixedThreadPool(Integer.valueOf(Config.get(Constants.GENERATOR_MAX_GENERATOR_THREADS)));
 
     if (options.initialPopulationSnapshotPath != null) {
       FileInputStream fis = null;
