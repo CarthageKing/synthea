@@ -1,15 +1,5 @@
 package org.mitre.synthea.export;
 
-import ca.uhn.fhir.context.FhirContext;
-import ca.uhn.fhir.model.api.ExtensionDt;
-import ca.uhn.fhir.model.dstu2.resource.Bundle;
-import ca.uhn.fhir.model.dstu2.resource.Bundle.Entry;
-import ca.uhn.fhir.model.dstu2.resource.Practitioner;
-import ca.uhn.fhir.model.dstu2.valueset.BundleTypeEnum;
-import ca.uhn.fhir.model.primitive.IntegerDt;
-
-import com.google.common.collect.Table;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,9 +12,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.lang3.StringUtils;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
+import org.mitre.synthea.helpers.Utilities;
 import org.mitre.synthea.world.agents.Clinician;
 import org.mitre.synthea.world.agents.Provider;
+
+import com.google.common.collect.Table;
+
+import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.model.api.ExtensionDt;
+import ca.uhn.fhir.model.api.IResource;
+import ca.uhn.fhir.model.dstu2.resource.Bundle;
+import ca.uhn.fhir.model.dstu2.resource.Bundle.Entry;
+import ca.uhn.fhir.model.dstu2.resource.Bundle.EntryRequest;
+import ca.uhn.fhir.model.dstu2.resource.Practitioner;
+import ca.uhn.fhir.model.dstu2.valueset.BundleTypeEnum;
+import ca.uhn.fhir.model.dstu2.valueset.HTTPVerbEnum;
+import ca.uhn.fhir.model.primitive.IntegerDt;
 
 public abstract class FhirPractitionerExporterDstu2 {
 
@@ -65,21 +71,50 @@ public abstract class FhirPractitionerExporterDstu2 {
         }
       }
 
+      if (Boolean.parseBoolean(Config.get(Constants.EXPORTER_FHIR_DSTU2_EXCLUDE_ORG_PRAC_RESOURCES))) {
+        for (Bundle.Entry bec : bundle.getEntry()) {
+          IResource r = bec.getResource();
+          bec.setFullUrl("http://synthea-dummy/fhir/" + r.getResourceName() + "/" + r.getIdElement().getIdPart());
+          EntryRequest req = bec.getRequest();
+          req.setMethod(HTTPVerbEnum.PUT);
+          req.setUrl(r.getResourceName() + "/" + r.getIdElement().getIdPart());
+        }
+      }
+
       String bundleJson = FHIR_CTX.newJsonParser().setPrettyPrint(true)
           .encodeResourceToString(bundle);
 
-      // get output folder
-      List<String> folders = new ArrayList<>();
-      folders.add("fhir_dstu2");
-      String baseDirectory = Config.get("exporter.baseDirectory");
-      File f = Paths.get(baseDirectory, folders.toArray(new String[0])).toFile();
-      f.mkdirs();
-      Path outFilePath = f.toPath().resolve("practitionerInformation" + stop + ".json");
+      if (!StringUtils.isBlank(Config.get(Constants.EXPORTER_FHIR_DSTU2_TARGET_FHIRSVR_BASEURL))) {
+        try {
+          Utilities.sendFhirJsonToUrl(bundleJson, Config.get(Constants.EXPORTER_FHIR_DSTU2_TARGET_FHIRSVR_BASEURL));
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      } else {
+        // get output folder
+        List<String> folders = new ArrayList<>();
+        folders.add("fhir_dstu2");
+        String baseDirectory = Config.get("exporter.baseDirectory");
+        File f = Paths.get(baseDirectory, folders.toArray(new String[0])).toFile();
+        f.mkdirs();
+        Path outFilePath = f.toPath().resolve("practitionerInformation" + stop + ".json");
 
-      try {
-        Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
-      } catch (IOException e) {
-        e.printStackTrace();
+        if (Boolean.valueOf(Config.get(Constants.EXPORTER_FHIR_ALLVERSIONS_COMPRESS_DATA))) {
+          File zipFile = Utilities.compressToZip(outFilePath.toFile(), bundleJson);
+          if (Boolean.valueOf(Config.get(Constants.EXPORT_AWS_S3_EXPORT_ENABLED))) {
+            Utilities.uploadToAwsS3(zipFile,
+              Config.get(Constants.EXPORT_AWS_S3_BUCKET_NAME),
+              Config.get(Constants.EXPORT_AWS_S3_BUCKET_BASE_PATH),
+              Config.get(Constants.EXPORT_AWS_S3_ACCESS_KEY),
+              Config.get(Constants.EXPORT_AWS_S3_SECRET_KEY));
+          }
+        } else {
+          try {
+            Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
       }
     }
   }

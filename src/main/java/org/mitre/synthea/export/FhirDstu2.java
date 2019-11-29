@@ -1,8 +1,44 @@
 package org.mitre.synthea.export;
 
+import java.awt.geom.Point2D;
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
+import org.mitre.synthea.helpers.Utilities;
+import org.mitre.synthea.world.agents.Clinician;
+import org.mitre.synthea.world.agents.Person;
+import org.mitre.synthea.world.agents.Provider;
+import org.mitre.synthea.world.concepts.Claim;
+import org.mitre.synthea.world.concepts.Costs;
+import org.mitre.synthea.world.concepts.HealthRecord;
+import org.mitre.synthea.world.concepts.HealthRecord.CarePlan;
+import org.mitre.synthea.world.concepts.HealthRecord.Code;
+import org.mitre.synthea.world.concepts.HealthRecord.Encounter;
+import org.mitre.synthea.world.concepts.HealthRecord.EncounterType;
+import org.mitre.synthea.world.concepts.HealthRecord.ImagingStudy;
+import org.mitre.synthea.world.concepts.HealthRecord.Medication;
+import org.mitre.synthea.world.concepts.HealthRecord.Observation;
+import org.mitre.synthea.world.concepts.HealthRecord.Procedure;
+import org.mitre.synthea.world.concepts.HealthRecord.Report;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.model.api.ExtensionDt;
 import ca.uhn.fhir.model.api.IDatatype;
+import ca.uhn.fhir.model.api.IResource;
 import ca.uhn.fhir.model.dstu2.composite.AddressDt;
 import ca.uhn.fhir.model.dstu2.composite.CodeableConceptDt;
 import ca.uhn.fhir.model.dstu2.composite.CodingDt;
@@ -79,39 +115,6 @@ import ca.uhn.fhir.model.primitive.PositiveIntDt;
 import ca.uhn.fhir.model.primitive.StringDt;
 import ca.uhn.fhir.model.primitive.UnsignedIntDt;
 import ca.uhn.fhir.model.primitive.XhtmlDt;
-
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-
-import java.awt.geom.Point2D;
-import java.math.BigDecimal;
-import java.math.MathContext;
-import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import org.mitre.synthea.helpers.Config;
-import org.mitre.synthea.helpers.Utilities;
-import org.mitre.synthea.world.agents.Clinician;
-import org.mitre.synthea.world.agents.Person;
-import org.mitre.synthea.world.agents.Provider;
-import org.mitre.synthea.world.concepts.Claim;
-import org.mitre.synthea.world.concepts.Costs;
-import org.mitre.synthea.world.concepts.HealthRecord;
-import org.mitre.synthea.world.concepts.HealthRecord.CarePlan;
-import org.mitre.synthea.world.concepts.HealthRecord.Code;
-import org.mitre.synthea.world.concepts.HealthRecord.Encounter;
-import org.mitre.synthea.world.concepts.HealthRecord.EncounterType;
-import org.mitre.synthea.world.concepts.HealthRecord.ImagingStudy;
-import org.mitre.synthea.world.concepts.HealthRecord.Medication;
-import org.mitre.synthea.world.concepts.HealthRecord.Observation;
-import org.mitre.synthea.world.concepts.HealthRecord.Procedure;
-import org.mitre.synthea.world.concepts.HealthRecord.Report;
 
 public class FhirDstu2 {
   // HAPI FHIR warns that the context creation is expensive, and should be performed
@@ -225,6 +228,46 @@ public class FhirDstu2 {
       // one claim per encounter
       encounterClaim(personEntry, bundle, encounterEntry, encounter.claim);
     }
+
+    List<IResource> removed = new ArrayList<>();
+
+    if (Boolean.parseBoolean(Config.get(Constants.EXPORTER_FHIR_DSTU2_EXCLUDE_ORG_PRAC_RESOURCES))) {
+      for (Iterator<Bundle.Entry> iter = bundle.getEntry().iterator(); iter.hasNext();) {
+        Bundle.Entry bec = iter.next();
+        if (bec.getResource() instanceof Organization) {
+          removed.add(bec.getResource());
+          iter.remove();
+        } else if (bec.getResource() instanceof Practitioner) {
+          removed.add(bec.getResource());
+          iter.remove();
+        }
+      }
+    }
+
+    String bundleJson = FHIR_CTX.newJsonParser().setPrettyPrint(true)
+      .encodeResourceToString(bundle);
+
+    if (!removed.isEmpty()) {
+      // TODO: a better logic
+      StringBuilder sb = new StringBuilder(bundleJson);
+      for (IResource ibr : removed) {
+        boolean changed = true;
+        final String tempId = "urn:uuid:" + ibr.getIdElement().getIdPart();
+        final String newRef = ibr.getResourceName() + "/" + ibr.getIdElement().getIdPart();
+        while (changed) {
+          changed = false;
+          int idx = sb.indexOf(tempId);
+          if (idx > 0) {
+            sb.replace(idx, idx + tempId.length(), newRef);
+            changed = true;
+          }
+        }
+      }
+      bundleJson = sb.toString();
+    }
+
+    bundle = FHIR_CTX.newJsonParser().parseResource(Bundle.class, bundleJson);
+
     return bundle;
   }
 

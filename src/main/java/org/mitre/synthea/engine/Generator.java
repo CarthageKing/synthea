@@ -22,6 +22,7 @@ import org.mitre.synthea.datastore.DataStore;
 import org.mitre.synthea.export.CDWExporter;
 import org.mitre.synthea.export.Exporter;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
 import org.mitre.synthea.helpers.TransitionMetrics;
 import org.mitre.synthea.modules.DeathModule;
 import org.mitre.synthea.modules.EncounterModule;
@@ -251,7 +252,7 @@ public class Generator {
    * Generate the population, using the currently set configuration settings.
    */
   public void run() {
-    ExecutorService threadPool = Executors.newFixedThreadPool(8);
+    ExecutorService threadPool = Executors.newFixedThreadPool(Integer.valueOf(Config.get(Constants.GENERATOR_MAX_GENERATOR_THREADS)));
 
     for (int i = 0; i < this.options.population; i++) {
       final int index = i;

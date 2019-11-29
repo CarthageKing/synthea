@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,7 @@ import org.hl7.fhir.r4.model.codesystems.DoseRateType;
 import org.hl7.fhir.utilities.xhtml.NodeType;
 import org.hl7.fhir.utilities.xhtml.XhtmlNode;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
 import org.mitre.synthea.helpers.SimpleCSV;
 import org.mitre.synthea.helpers.Utilities;
 import org.mitre.synthea.world.agents.Clinician;
@@ -311,6 +313,46 @@ public class FhirR4 {
       // Add Provenance to the Bundle
       provenance(bundle, person, stopTime);
     }
+
+    List<Resource> removed = new ArrayList<>();
+
+    if (Boolean.parseBoolean(Config.get(Constants.EXPORTER_FHIR_R4_EXCLUDE_ORG_PRAC_RESOURCES))) {
+      for (Iterator<BundleEntryComponent> iter = bundle.getEntry().iterator(); iter.hasNext();) {
+        BundleEntryComponent bec = iter.next();
+        if (bec.getResource() instanceof Organization) {
+          removed.add(bec.getResource());
+          iter.remove();
+        } else if (bec.getResource() instanceof Practitioner) {
+          removed.add(bec.getResource());
+          iter.remove();
+        }
+      }
+    }
+
+    String bundleJson = FHIR_CTX.newJsonParser().setPrettyPrint(true)
+      .encodeResourceToString(bundle);
+
+    if (!removed.isEmpty()) {
+      // TODO: a better logic
+      StringBuilder sb = new StringBuilder(bundleJson);
+      for (Resource ibr : removed) {
+        boolean changed = true;
+        final String tempId = "urn:uuid:" + ibr.getIdElement().getIdPart();
+        final String newRef = ibr.getResourceType().name() + "/" + ibr.getIdElement().getIdPart();
+        while (changed) {
+          changed = false;
+          int idx = sb.indexOf(tempId);
+          if (idx > 0) {
+            sb.replace(idx, idx + tempId.length(), newRef);
+            changed = true;
+          }
+        }
+      }
+      bundleJson = sb.toString();
+    }
+
+    bundle = FHIR_CTX.newJsonParser().parseResource(Bundle.class, bundleJson);
+
     return bundle;
   }
 

@@ -1,8 +1,5 @@
 package org.mitre.synthea.export;
 
-import ca.uhn.fhir.context.FhirContext;
-import ca.uhn.fhir.parser.IParser;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,8 +14,10 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.Predicate;
 
+import org.apache.commons.lang3.StringUtils;
 import org.mitre.synthea.engine.Generator;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
 import org.mitre.synthea.helpers.Utilities;
 import org.mitre.synthea.modules.DeathModule;
 import org.mitre.synthea.world.agents.Person;
@@ -26,6 +25,9 @@ import org.mitre.synthea.world.concepts.HealthRecord;
 import org.mitre.synthea.world.concepts.HealthRecord.Encounter;
 import org.mitre.synthea.world.concepts.HealthRecord.Observation;
 import org.mitre.synthea.world.concepts.HealthRecord.Report;
+
+import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.parser.IParser;
 
 public abstract class Exporter {
   
@@ -152,8 +154,27 @@ public abstract class Exporter {
         }
       } else {
         String bundleJson = FhirStu3.convertToFHIRJson(person, stopTime);
-        Path outFilePath = outDirectory.toPath().resolve(filename(person, fileTag, "json"));
-        writeNewFile(outFilePath, bundleJson);
+        if (!StringUtils.isBlank(Config.get(Constants.EXPORTER_FHIR_STU3_TARGET_FHIRSVR_BASEURL))) {
+          try {
+            Utilities.sendFhirJsonToUrl(bundleJson, Config.get(Constants.EXPORTER_FHIR_STU3_TARGET_FHIRSVR_BASEURL));
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        } else {
+          Path outFilePath = outDirectory.toPath().resolve(filename(person, fileTag, "json"));
+          if (Boolean.valueOf(Config.get(Constants.EXPORTER_FHIR_ALLVERSIONS_COMPRESS_DATA))) {
+            File zipFile = Utilities.compressToZip(outFilePath.toFile(), bundleJson);
+            if (Boolean.valueOf(Config.get(Constants.EXPORT_AWS_S3_EXPORT_ENABLED))) {
+              Utilities.uploadToAwsS3(zipFile,
+                Config.get(Constants.EXPORT_AWS_S3_BUCKET_NAME),
+                Config.get(Constants.EXPORT_AWS_S3_BUCKET_BASE_PATH),
+                Config.get(Constants.EXPORT_AWS_S3_ACCESS_KEY),
+                Config.get(Constants.EXPORT_AWS_S3_SECRET_KEY));
+            }
+          } else {
+            writeNewFile(outFilePath, bundleJson);
+          }
+        }
       }
     }
     if (Boolean.parseBoolean(Config.get("exporter.fhir_dstu2.export"))) {
@@ -169,8 +190,27 @@ public abstract class Exporter {
         }
       } else {
         String bundleJson = FhirDstu2.convertToFHIRJson(person, stopTime);
-        Path outFilePath = outDirectory.toPath().resolve(filename(person, fileTag, "json"));
-        writeNewFile(outFilePath, bundleJson);
+        if (!StringUtils.isBlank(Config.get(Constants.EXPORTER_FHIR_DSTU2_TARGET_FHIRSVR_BASEURL))) {
+          try {
+            Utilities.sendFhirJsonToUrl(bundleJson, Config.get(Constants.EXPORTER_FHIR_DSTU2_TARGET_FHIRSVR_BASEURL));
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        } else {
+          Path outFilePath = outDirectory.toPath().resolve(filename(person, fileTag, "json"));
+          if (Boolean.valueOf(Config.get(Constants.EXPORTER_FHIR_ALLVERSIONS_COMPRESS_DATA))) {
+            File zipFile = Utilities.compressToZip(outFilePath.toFile(), bundleJson);
+            if (Boolean.valueOf(Config.get(Constants.EXPORT_AWS_S3_EXPORT_ENABLED))) {
+              Utilities.uploadToAwsS3(zipFile,
+                Config.get(Constants.EXPORT_AWS_S3_BUCKET_NAME),
+                Config.get(Constants.EXPORT_AWS_S3_BUCKET_BASE_PATH),
+                Config.get(Constants.EXPORT_AWS_S3_ACCESS_KEY),
+                Config.get(Constants.EXPORT_AWS_S3_SECRET_KEY));
+            }
+          } else {
+            writeNewFile(outFilePath, bundleJson);
+          }
+        }
       }
     }
     if (Boolean.parseBoolean(Config.get("exporter.fhir.export"))) {
@@ -186,8 +226,27 @@ public abstract class Exporter {
         }
       } else {
         String bundleJson = FhirR4.convertToFHIRJson(person, stopTime);
-        Path outFilePath = outDirectory.toPath().resolve(filename(person, fileTag, "json"));
-        writeNewFile(outFilePath, bundleJson);
+        if (!StringUtils.isBlank(Config.get(Constants.EXPORTER_FHIR_R4_TARGET_FHIRSVR_BASEURL))) {
+          try {
+            Utilities.sendFhirJsonToUrl(bundleJson, Config.get(Constants.EXPORTER_FHIR_R4_TARGET_FHIRSVR_BASEURL));
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        } else {
+          Path outFilePath = outDirectory.toPath().resolve(filename(person, fileTag, "json"));
+          if (Boolean.valueOf(Config.get(Constants.EXPORTER_FHIR_ALLVERSIONS_COMPRESS_DATA))) {
+            File zipFile = Utilities.compressToZip(outFilePath.toFile(), bundleJson);
+            if (Boolean.valueOf(Config.get(Constants.EXPORT_AWS_S3_EXPORT_ENABLED))) {
+              Utilities.uploadToAwsS3(zipFile,
+                Config.get(Constants.EXPORT_AWS_S3_BUCKET_NAME),
+                Config.get(Constants.EXPORT_AWS_S3_BUCKET_BASE_PATH),
+                Config.get(Constants.EXPORT_AWS_S3_ACCESS_KEY),
+                Config.get(Constants.EXPORT_AWS_S3_SECRET_KEY));
+            }
+          } else {
+            writeNewFile(outFilePath, bundleJson);
+          }
+        }
       }
       FhirGroupExporterR4.addPatient((String) person.attributes.get(Person.ID));
     }

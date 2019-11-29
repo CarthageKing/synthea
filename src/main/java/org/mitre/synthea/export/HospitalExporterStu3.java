@@ -1,8 +1,5 @@
 package org.mitre.synthea.export;
 
-import ca.uhn.fhir.context.FhirContext;
-import com.google.common.collect.Table;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,14 +11,24 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.lang3.StringUtils;
 import org.hl7.fhir.dstu3.model.Bundle;
 import org.hl7.fhir.dstu3.model.Bundle.BundleEntryComponent;
+import org.hl7.fhir.dstu3.model.Bundle.BundleEntryRequestComponent;
 import org.hl7.fhir.dstu3.model.Bundle.BundleType;
+import org.hl7.fhir.dstu3.model.Bundle.HTTPVerb;
 import org.hl7.fhir.dstu3.model.Extension;
 import org.hl7.fhir.dstu3.model.IntegerType;
 import org.hl7.fhir.dstu3.model.Organization;
+import org.hl7.fhir.dstu3.model.Resource;
 import org.mitre.synthea.helpers.Config;
+import org.mitre.synthea.helpers.Constants;
+import org.mitre.synthea.helpers.Utilities;
 import org.mitre.synthea.world.agents.Provider;
+
+import com.google.common.collect.Table;
+
+import ca.uhn.fhir.context.FhirContext;
 
 public abstract class HospitalExporterStu3 {
 
@@ -49,21 +56,50 @@ public abstract class HospitalExporterStu3 {
         }
       }
 
+      if (Boolean.parseBoolean(Config.get(Constants.EXPORTER_FHIR_STU3_EXCLUDE_ORG_PRAC_RESOURCES))) {
+        for (BundleEntryComponent bec : bundle.getEntry()) {
+          Resource r = bec.getResource();
+          bec.setFullUrl("http://synthea-dummy/fhir/" + r.getResourceType().name() + "/" + r.getIdElement().getIdPart());
+          BundleEntryRequestComponent req = bec.getRequest();
+          req.setMethod(HTTPVerb.PUT);
+          req.setUrl(r.getResourceType().name() + "/" + r.getIdElement().getIdPart());
+        }
+      }
+
       String bundleJson = FHIR_CTX.newJsonParser().setPrettyPrint(true)
           .encodeResourceToString(bundle);
 
-      // get output folder
-      List<String> folders = new ArrayList<>();
-      folders.add("fhir_stu3");
-      String baseDirectory = Config.get("exporter.baseDirectory");
-      File f = Paths.get(baseDirectory, folders.toArray(new String[0])).toFile();
-      f.mkdirs();
-      Path outFilePath = f.toPath().resolve("hospitalInformation" + stop + ".json");
+      if (!StringUtils.isBlank(Config.get(Constants.EXPORTER_FHIR_STU3_TARGET_FHIRSVR_BASEURL))) {
+        try {
+          Utilities.sendFhirJsonToUrl(bundleJson, Config.get(Constants.EXPORTER_FHIR_STU3_TARGET_FHIRSVR_BASEURL));
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      } else {
+        // get output folder
+        List<String> folders = new ArrayList<>();
+        folders.add("fhir_stu3");
+        String baseDirectory = Config.get("exporter.baseDirectory");
+        File f = Paths.get(baseDirectory, folders.toArray(new String[0])).toFile();
+        f.mkdirs();
+        Path outFilePath = f.toPath().resolve("hospitalInformation" + stop + ".json");
 
-      try {
-        Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
-      } catch (IOException e) {
-        e.printStackTrace();
+        if (Boolean.valueOf(Config.get(Constants.EXPORTER_FHIR_ALLVERSIONS_COMPRESS_DATA))) {
+          File zipFile = Utilities.compressToZip(outFilePath.toFile(), bundleJson);
+          if (Boolean.valueOf(Config.get(Constants.EXPORT_AWS_S3_EXPORT_ENABLED))) {
+            Utilities.uploadToAwsS3(zipFile,
+              Config.get(Constants.EXPORT_AWS_S3_BUCKET_NAME),
+              Config.get(Constants.EXPORT_AWS_S3_BUCKET_BASE_PATH),
+              Config.get(Constants.EXPORT_AWS_S3_ACCESS_KEY),
+              Config.get(Constants.EXPORT_AWS_S3_SECRET_KEY));
+          }
+        } else {
+          try {
+            Files.write(outFilePath, Collections.singleton(bundleJson), StandardOpenOption.CREATE_NEW);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
       }
     }
   }
